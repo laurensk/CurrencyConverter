@@ -1,8 +1,9 @@
 import React from 'react';
-import {Alert, SafeAreaView, Text, View} from 'react-native';
+import {Alert, SafeAreaView, Switch, Text, View} from 'react-native';
 import {Button, Input} from 'react-native-elements';
 
 interface StateType {
+  automatic: boolean;
   eur: string;
   usd: string;
 }
@@ -16,9 +17,24 @@ class App extends React.Component<any, StateType> {
   constructor(props: any) {
     super(props);
     this.state = {
+      automatic: false,
       eur: '',
       usd: '',
     };
+  }
+
+  async convert(from: ConversionType, to: ConversionType, amount: string) {
+    if (!this.state.automatic) {
+      if (amount.length <= 0) return this.noValueError(from);
+      if (!parseFloat(amount)) return this.noNumberError();
+    }
+
+    const course = await (await fetch(`http://currencies.apps.grandtrunk.net/getlatest/${from}/${to}`)).json();
+    const result = (course * parseFloat(amount)).toFixed(2);
+
+    return from == ConversionType.EUR
+      ? this.setState({eur: result == 'NaN' ? '0' : result})
+      : this.setState({usd: result == 'NaN' ? '0' : result});
   }
 
   render() {
@@ -33,7 +49,7 @@ class App extends React.Component<any, StateType> {
           }}>
           <Text
             style={{
-              marginTop: 80,
+              marginTop: 70,
               color: '#2089DC',
               fontWeight: 'bold',
               fontSize: 30,
@@ -41,86 +57,79 @@ class App extends React.Component<any, StateType> {
             }}>
             CurrencyConverter
           </Text>
-          <View style={{width: 200, marginTop: 100}}>
-            <Input
-              value={this.state.eur}
-              placeholder="69"
-              keyboardType="number-pad"
-              onChangeText={(t) => this.setState({eur: t})}
-              rightIcon={
-                <Text
-                  style={{
-                    fontSize: 18,
-                    fontWeight: 'bold',
-                    marginRight: 10,
-                    color: '#86939E',
-                  }}>
-                  € EUR
-                </Text>
-              }
-            />
-            <Input
-              value={this.state.usd}
-              placeholder="420"
-              keyboardType="number-pad"
-              onChangeText={(t) => this.setState({usd: t})}
-              rightIcon={
-                <Text
-                  style={{
-                    fontSize: 18,
-                    fontWeight: 'bold',
-                    marginRight: 10,
-                    color: '#86939E',
-                  }}>
-                  $ USD
-                </Text>
-              }
-            />
+          <View style={{width: 200, marginTop: 80}}>
+            {this.renderInput(this.state.eur, '€ EUR', '69', (t: string) => {
+              this.setState({
+                eur: t,
+              });
+              if (this.state.automatic) this.convert(ConversionType.USD, ConversionType.EUR, t);
+            })}
+            {this.renderInput(this.state.usd, '$ USD', '420', (t: string) => {
+              this.setState({
+                usd: t,
+              });
+              if (this.state.automatic) this.convert(ConversionType.EUR, ConversionType.USD, t);
+            })}
           </View>
-          <View style={{flexDirection: 'row'}}>
-            <Button
-              onPress={() =>
-                this.convert(
-                  ConversionType.USD,
-                  ConversionType.EUR,
-                  this.state.eur,
-                )
-              }
-              style={{marginTop: 20, marginRight: 5}}
-              title="EUR to USD"
-            />
-            <Button
-              onPress={() =>
-                this.convert(
-                  ConversionType.EUR,
-                  ConversionType.USD,
-                  this.state.usd,
-                )
-              }
-              style={{marginTop: 20, marginLeft: 5}}
-              title="USD to EUR"
-            />
-          </View>
+          {!this.state.automatic && (
+            <View style={{flexDirection: 'row'}}>
+              {this.renderButton(ConversionType.USD, ConversionType.EUR, this.state.eur, 'EUR to USD')}
+              {this.renderButton(ConversionType.EUR, ConversionType.USD, this.state.eur, 'USD to EUR')}
+            </View>
+          )}
+          {this.renderAutomatic()}
         </View>
       </SafeAreaView>
     );
   }
 
-  async convert(from: ConversionType, to: ConversionType, amount: string) {
-    const useAmount = parseFloat(amount);
-    if (amount.length <= 0)
-      return Alert.alert(
-        'Error',
-        `Please provide a value in the ${from.toUpperCase()} field to convert.`,
-      );
-    if (!useAmount) return Alert.alert('Error', 'Please input a valid number.');
-    const res = await fetch(
-      `http://currencies.apps.grandtrunk.net/getlatest/${from}/${to}`,
+  renderInput(value: string, text: string, placeholder: string, updateAction: Function) {
+    return (
+      <Input
+        value={value}
+        placeholder={placeholder}
+        keyboardType="number-pad"
+        onChangeText={(t) => updateAction(t)}
+        rightIcon={
+          <Text
+            style={{
+              fontSize: 18,
+              fontWeight: 'bold',
+              marginRight: 10,
+              color: '#86939E',
+            }}>
+            {text}
+          </Text>
+        }
+      />
     );
-    const json = await res.json();
-    return from == ConversionType.EUR
-      ? this.setState({eur: (json * useAmount).toFixed(2)})
-      : this.setState({usd: (json * useAmount).toFixed(2)});
+  }
+
+  renderButton(from: ConversionType, to: ConversionType, amount: string, title: string) {
+    return (
+      <Button onPress={() => this.convert(from, to, amount)} style={{marginTop: 20, marginRight: 5}} title={title} />
+    );
+  }
+
+  renderAutomatic() {
+    return (
+      <View style={{paddingTop: 30, alignItems: 'center'}}>
+        <Text style={{color: '#2089DC', fontWeight: 'bold'}}>Automatic mode</Text>
+        <Switch
+          style={{marginTop: 10}}
+          value={this.state.automatic}
+          trackColor={{true: '#2089DC', false: 'grey'}}
+          onValueChange={(v) => this.setState({automatic: v})}></Switch>
+      </View>
+    );
+  }
+
+  noValueError(from: ConversionType) {
+    return Alert.alert('Error', `Please provide a value in the ${from.toUpperCase()} field to convert.`);
+  }
+
+  noNumberError() {
+    return Alert.alert('Error', 'Please input a valid number.');
   }
 }
 
